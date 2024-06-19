@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
   }
 
   int process_id = std::stoi(argv[1]);
-  ReliableBroadcast rb(process_id, 60123);
+  ReliableBroadcast rb(process_id, 49588);
   rb.start();
 
   // Bulletin board simulation

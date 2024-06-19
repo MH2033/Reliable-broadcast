@@ -13,6 +13,7 @@
 ReliableBroadcast::ReliableBroadcast(int process_id, int port)
     : process_id(process_id), port(port), seq_num(0), running(true) {
   sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+  memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -66,12 +67,12 @@ void ReliableBroadcast::receiverThread() {
         handleDiscoveryMessage(DiscoveryMessage(sender_id, ip_address));
       }
     }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 }
 
 void ReliableBroadcast::handleDiscoveryMessage(
     const DiscoveryMessage& discovery_msg) {
-  std::lock_guard<std::mutex> lock(mtx);
   bool already_discovered = false;
   for (const auto& peer : peers) {
     if (peer == discovery_msg.ip_address) {
@@ -125,7 +126,7 @@ void ReliableBroadcast::sendDiscoveryMessage() {
   struct sockaddr_in broadcast_addr;
   broadcast_addr.sin_family = AF_INET;
   broadcast_addr.sin_port = htons(port);
-  broadcast_addr.sin_addr.s_addr = inet_addr("255.255.255.255");
+  broadcast_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
   int broadcast_enable = 1;
   setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &broadcast_enable,
              sizeof(broadcast_enable));
