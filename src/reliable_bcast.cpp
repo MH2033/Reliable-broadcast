@@ -99,14 +99,13 @@ void ReliableBroadcast::handleMessage(const Message& message) {
       sendToPeer(forward_msg, peer.first);
     }
   }
-  if (acked[message.seq_num].size() == peers.size()) {
-    deliver(message);
-  } else {
-    pending.push_back(message);
-  }
+
+  if (acked[message.seq_num].size() == 1) pending.push_back(message);
+
   for (auto it = pending.begin(); it != pending.end();) {
     if (acked[it->seq_num].size() == peers.size()) {
       deliver(*it);
+      acked.erase(it->seq_num);
       it = pending.erase(it);
     } else {
       ++it;
