@@ -73,6 +73,7 @@ void ReliableBroadcast::receiverThread() {
 
 void ReliableBroadcast::handleDiscoveryMessage(
     const DiscoveryMessage& discovery_msg) {
+  if (discovery_msg.process_id == process_id) return;  // Ignore self
   bool already_discovered = false;
   for (const auto& peer : peers) {
     if (peer == discovery_msg.ip_address) {
