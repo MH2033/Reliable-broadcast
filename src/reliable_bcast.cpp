@@ -128,6 +128,8 @@ void ReliableBroadcast::handleJoin(std::string ip_address, int process_id) {
     }
     sendFlushToPeer(peer.first);
   }
+  // Send view change to the new peer
+  sendViewChangeToPeer(view_change, ip_address);
 }
 
 void ReliableBroadcast::sendFlushToPeer(const std::string& peer) {
