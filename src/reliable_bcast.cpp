@@ -62,6 +62,8 @@ void ReliableBroadcast::receiverThread() {
     if (bytes_received > 0) {
       std::lock_guard<std::mutex> lock(send_mtx);
       std::string received_message(buffer, bytes_received);
+      std::cout << "[DEBUG] Received message: " << received_message
+                << std::endl;
       std::istringstream iss(received_message);
       std::string type;
       iss >> type;
