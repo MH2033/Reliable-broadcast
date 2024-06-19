@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 
@@ -37,7 +38,9 @@ void ReliableBroadcast::stop() {
 }
 
 void ReliableBroadcast::deliver(const Message& message) {
-  std::cout << "Delivered message from " << message.sender_id << ": "
+  std::time_t now = std::time(nullptr);
+  std::cout << "[" << std::put_time(std::localtime(&now), "%F %T") << "] "
+            << "Delivered message from " << message.sender_id << ": "
             << message.content << std::endl;
 }
 
