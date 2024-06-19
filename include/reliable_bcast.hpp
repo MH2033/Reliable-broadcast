@@ -20,12 +20,25 @@ struct Message {
       : seq_num(seq), sender_id(sender), content(msg) {}
 };
 
-struct DiscoveryMessage {
+struct AckMessage {
+  int seq_num;
+  int sender_id;
+
+  AckMessage(int seq, int sender) : seq_num(seq), sender_id(sender) {}
+};
+
+struct ViewChangeMessage {
+  int process_id;
+  std::vector<std::pair<std::string, int>> members;
+
+  ViewChangeMessage(int id, const std::vector<std::pair<std::string, int>> mems)
+      : process_id(id), members(mems) {}
+};
+
+struct JoinMessage {
   int process_id;
   std::string ip_address;
-
-  DiscoveryMessage(int id, const std::string& ip)
-      : process_id(id), ip_address(ip) {}
+  JoinMessage(int id, std::string ip) : process_id(id), ip_address(ip) {}
 };
 
 class ReliableBroadcast {
@@ -38,19 +51,29 @@ class ReliableBroadcast {
 
  private:
   void receiverThread();
-  void discoveryThread();
+  void HeartbeaThread();
   void handleMessage(const Message& message);
-  void handleDiscoveryMessage(const DiscoveryMessage& discovery_msg);
+  void handleAck(const AckMessage& message);
+  void handleViewChange();
+  void handleJoin(std::string ip_address, int process_id);
   void sendToAll(const Message& message);
-  void sendToPeer(const Message& message, const std::string& peer);
-  void sendDiscoveryMessage();
+  void sendMsgToPeer(const Message& message, const std::string& peer);
+  void sendViewChangeToPeer(const ViewChangeMessage& message,
+                            const std::string& peer);
+  void sendFlushToPeer(const std::string& peer);
+
+  void sendJoinMessage();
   std::string getLocalIP();
 
   int process_id;
-  std::vector<std::pair<std::string, int>> peers;
+  std::vector<std::pair<std::string, int>> curr_view;
+  std::vector<std::pair<std::string, int>> new_view;
+  std::set<int> flush_complete;
+
   int port;
   int seq_num;
-  std::mutex mtx;
+  std::mutex send_mtx;
+  std::atomic<bool> view_change_in_progress{false};
   std::map<int, std::set<int>> acked;
   std::vector<Message> pending;
   bool running;
