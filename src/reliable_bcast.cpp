@@ -137,7 +137,7 @@ void ReliableBroadcast::discoveryThread() {
   while (running) {
     sendDiscoveryMessage();
     std::this_thread::sleep_for(
-        std::chrono::seconds(5));  // Periodically send discovery messages
+        std::chrono::seconds(2));  // Periodically send discovery messages
   }
 }
 
