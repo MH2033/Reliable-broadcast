@@ -11,6 +11,14 @@
 #include <iostream>
 #include <sstream>
 
+inline std::string curr_timestamp() {
+  // Get current system offset from utc
+  std::time_t now = std::time(nullptr);
+  // Print current time
+  std::stringstream curr_time;
+  curr_time << "[" << std::put_time(std::localtime(&now), "%F %T") << "] ";
+  return curr_time.str();
+}
 ReliableBroadcast::ReliableBroadcast(int process_id, int port)
     : process_id(process_id), port(port), seq_num(0), running(true) {
   sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -39,9 +47,8 @@ void ReliableBroadcast::stop() {
 
 void ReliableBroadcast::deliver(const Message& message) {
   std::time_t now = std::time(nullptr);
-  std::cout << "[" << std::put_time(std::localtime(&now), "%F %T") << "] "
-            << "Delivered message from " << message.sender_id << ": "
-            << message.content << std::endl;
+  std::cout << curr_timestamp() << "Delivered message from "
+            << message.sender_id << ": " << message.content << std::endl;
 }
 
 void ReliableBroadcast::receiverThread() {
@@ -87,8 +94,9 @@ void ReliableBroadcast::handleDiscoveryMessage(
   if (!already_discovered) {
     peers.push_back(
         std::make_pair(discovery_msg.ip_address, discovery_msg.process_id));
-    std::cout << "Discovered peer " << discovery_msg.process_id << " at "
-              << discovery_msg.ip_address << std::endl;
+    std::cout << curr_timestamp() << "Discovered peer "
+              << discovery_msg.process_id << " at " << discovery_msg.ip_address
+              << std::endl;
   }
 }
 
