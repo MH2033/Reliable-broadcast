@@ -16,7 +16,7 @@ inline std::string curr_timestamp() {
   std::time_t now = std::time(nullptr);
   // Print current time
   std::stringstream curr_time;
-  curr_time << "[" << std::put_time(std::localtime(&now), "%F %T") << "] ";
+  curr_time << "[" << std::put_time(std::localtime(&now), "%T") << "] ";
   return curr_time.str();
 }
 ReliableBroadcast::ReliableBroadcast(int process_id, int port)
