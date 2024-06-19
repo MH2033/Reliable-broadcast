@@ -117,7 +117,7 @@ void ReliableBroadcast::receiverThread() {
   }
 }
 
-void ReliableBroadcast::handleJoin(std::string ip_address, int process_id) {
+void ReliableBroadcast::handleJoin(std::string ip_address, int id) {
   new_view = curr_view;
   new_view.push_back(std::make_pair(ip_address, process_id));
   ViewChangeMessage view_change(process_id, new_view);
