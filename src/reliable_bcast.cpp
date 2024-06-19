@@ -76,13 +76,14 @@ void ReliableBroadcast::handleDiscoveryMessage(
   if (discovery_msg.process_id == process_id) return;  // Ignore self
   bool already_discovered = false;
   for (const auto& peer : peers) {
-    if (peer == discovery_msg.ip_address) {
+    if (peer.first == discovery_msg.ip_address) {
       already_discovered = true;
       break;
     }
   }
   if (!already_discovered) {
-    peers.push_back(discovery_msg.ip_address);
+    peers.push_back(
+        std::make_pair(discovery_msg.ip_address, discovery_msg.process_id));
     std::cout << "Discovered peer " << discovery_msg.process_id << " at "
               << discovery_msg.ip_address << std::endl;
   }
@@ -91,7 +92,13 @@ void ReliableBroadcast::handleDiscoveryMessage(
 void ReliableBroadcast::handleMessage(const Message& message) {
   if (message.sender_id == process_id) return;  // Ignore self
   acked[message.seq_num].insert(message.sender_id);
-  sendToAll(message);
+  Message forward_msg(message.seq_num, process_id, message.content);
+  for (const auto& peer : peers) {
+    auto res = acked[message.seq_num].find(peer.second);
+    if (res == acked[message.seq_num].end()) {
+      sendToPeer(forward_msg, peer.first);
+    }
+  }
   if (acked[message.seq_num].size() == peers.size()) {
     deliver(message);
   } else {
@@ -115,10 +122,23 @@ void ReliableBroadcast::sendToAll(const Message& message) {
     struct sockaddr_in peer_addr;
     peer_addr.sin_family = AF_INET;
     peer_addr.sin_port = htons(port);
-    inet_pton(AF_INET, peer.c_str(), &peer_addr.sin_addr);
+    inet_pton(AF_INET, peer.first.c_str(), &peer_addr.sin_addr);
     sendto(sockfd, serialized_message.c_str(), serialized_message.size(), 0,
            (struct sockaddr*)&peer_addr, sizeof(peer_addr));
   }
+}
+
+void ReliableBroadcast::sendToPeer(const Message& message,
+                                   const std::string& peer) {
+  std::string serialized_message = "MSG " + std::to_string(message.seq_num) +
+                                   " " + std::to_string(message.sender_id) +
+                                   " " + message.content;
+  struct sockaddr_in peer_addr;
+  peer_addr.sin_family = AF_INET;
+  peer_addr.sin_port = htons(port);
+  inet_pton(AF_INET, peer.c_str(), &peer_addr.sin_addr);
+  sendto(sockfd, serialized_message.c_str(), serialized_message.size(), 0,
+         (struct sockaddr*)&peer_addr, sizeof(peer_addr));
 }
 
 void ReliableBroadcast::sendDiscoveryMessage() {

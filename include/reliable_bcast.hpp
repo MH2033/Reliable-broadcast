@@ -42,11 +42,12 @@ class ReliableBroadcast {
   void handleMessage(const Message& message);
   void handleDiscoveryMessage(const DiscoveryMessage& discovery_msg);
   void sendToAll(const Message& message);
+  void sendToPeer(const Message& message, const std::string& peer);
   void sendDiscoveryMessage();
   std::string getLocalIP();
 
   int process_id;
-  std::vector<std::string> peers;
+  std::vector<std::pair<std::string, int>> peers;
   int port;
   int seq_num;
   std::mutex mtx;
