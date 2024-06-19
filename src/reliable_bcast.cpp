@@ -89,6 +89,7 @@ void ReliableBroadcast::handleDiscoveryMessage(
 }
 
 void ReliableBroadcast::handleMessage(const Message& message) {
+  if (message.sender_id == process_id) return;  // Ignore self
   acked[message.seq_num].insert(message.sender_id);
   sendToAll(message);
   if (acked[message.seq_num].size() == peers.size()) {
