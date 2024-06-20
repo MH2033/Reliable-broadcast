@@ -57,6 +57,7 @@ class ReliableBroadcast {
   void handleViewChange();
   void handleJoin(std::string ip_address, int process_id);
   void sendToAll(const Message& message);
+  void sendAckToAll(const AckMessage& message);
   void sendMsgToPeer(const Message& message, const std::string& peer);
   void sendViewChangeToPeer(const ViewChangeMessage& message,
                             const std::string& peer);

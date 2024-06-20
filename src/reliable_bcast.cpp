@@ -28,13 +28,18 @@ ReliableBroadcast::ReliableBroadcast(int process_id, int port)
   addr.sin_port = htons(port);
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
   bind(sockfd, (struct sockaddr*)&addr, sizeof(addr));
-  sendJoinMessage();
+  if (process_id == 0)
+    curr_view.push_back(std::make_pair(getLocalIP(), process_id));
+  else
+    sendJoinMessage();
 }
 
 void ReliableBroadcast::broadcast(const std::string& message) {
   std::lock_guard<std::mutex> lock(send_mtx);
   Message msg(seq_num++, process_id, message);
-  sendToAll(msg);
+  for (auto peer : curr_view) {
+    sendMsgToPeer(msg, peer.first);
+  }
 }
 
 void ReliableBroadcast::start() {
@@ -65,6 +70,7 @@ void ReliableBroadcast::receiverThread() {
       std::string received_message(buffer, bytes_received);
       std::cout << "[DEBUG] Received message: " << received_message
                 << std::endl;
+      std::cout << "curr_view size: " << curr_view.size() << endl;
       std::istringstream iss(received_message);
       std::string type;
       iss >> type;
@@ -74,18 +80,20 @@ void ReliableBroadcast::receiverThread() {
         iss >> seq_num >> sender_id;
         std::getline(iss, content);
         handleMessage(Message(seq_num, sender_id, content));
-      } else if (type == "VIEW_CHANGE") {
+      } else if (type == "VIEW_CHANGE" && process_id != 0) {
         int sender_id;
         iss >> sender_id;
         new_view.clear();
         view_change_in_progress = true;
-        while (iss) {
+        while (!iss.eof()) {
           std::string ip_address;
           int process_id;
           iss >> ip_address >> process_id;
+          cout << "adding peer: " << ip_address << " " << process_id << endl;
           new_view.push_back(std::make_pair(ip_address, process_id));
         }
         if (curr_view.size() == 0) {
+          cout << "First view installed" << endl;
           curr_view = new_view;
           view_change_in_progress = false;
         } else {
@@ -95,8 +103,6 @@ void ReliableBroadcast::receiverThread() {
         int sender_id;
         std::string ip_address;
         iss >> sender_id >> ip_address;
-        cout << "Received join message from " << ip_address
-             << "id: " << sender_id << endl;
         view_change_in_progress = true;
         handleJoin(ip_address, sender_id);
       } else if (type == "ACK") {
@@ -113,6 +119,7 @@ void ReliableBroadcast::receiverThread() {
           pending.clear();
           view_change_in_progress = false;
           curr_view = new_view;
+          cout << "View change complete" << endl;
         }
       }
     }
@@ -122,9 +129,10 @@ void ReliableBroadcast::receiverThread() {
 
 void ReliableBroadcast::handleJoin(std::string ip_address, int id) {
   new_view = curr_view;
-  new_view.push_back(std::make_pair(ip_address, process_id));
+  new_view.push_back(std::make_pair(ip_address, id));
 
   ViewChangeMessage view_change(process_id, new_view);
+  cout << "new view size: " << new_view.size() << endl;
   for (auto peer : curr_view) {
     sendViewChangeToPeer(view_change, peer.first);
     for (auto msg : pending) {
@@ -147,6 +155,7 @@ void ReliableBroadcast::sendFlushToPeer(const std::string& peer) {
 }
 void ReliableBroadcast::handleViewChange() {
   for (auto peer : curr_view) {
+    cout << "Peer: " << peer.first << " " << peer.second << endl;
     for (auto msg : pending) {
       sendMsgToPeer(msg, peer.first);
     }
@@ -155,15 +164,15 @@ void ReliableBroadcast::handleViewChange() {
 }
 
 void ReliableBroadcast::handleMessage(const Message& message) {
-  if (message.sender_id == process_id) return;  // Ignore self
+  // if (message.sender_id == process_id) return;  // Ignore self
   acked[message.seq_num].insert(message.sender_id);
   Message forward_msg(message.seq_num, process_id, message.content);
   pending.push_back(message);
-  sendToAll(forward_msg);
+  sendAckToAll(AckMessage(message.seq_num, process_id));
 }
 
 void ReliableBroadcast::handleAck(const AckMessage& message) {
-  if (message.sender_id == process_id) return;  // Ignore self
+  // if (message.sender_id == process_id) return;  // Ignore self
   acked[message.seq_num].insert(message.sender_id);
 
   for (auto it = pending.begin(); it != pending.end();) {
@@ -177,6 +186,18 @@ void ReliableBroadcast::handleAck(const AckMessage& message) {
   }
 }
 
+void ReliableBroadcast::sendAckToAll(const AckMessage& message) {
+  std::string serialized_message = "ACK " + std::to_string(message.seq_num) +
+                                   " " + std::to_string(message.sender_id);
+  for (const auto& peer : curr_view) {
+    struct sockaddr_in peer_addr;
+    peer_addr.sin_family = AF_INET;
+    peer_addr.sin_port = htons(port);
+    inet_pton(AF_INET, peer.first.c_str(), &peer_addr.sin_addr);
+    sendto(sockfd, serialized_message.c_str(), serialized_message.size(), 0,
+           (struct sockaddr*)&peer_addr, sizeof(peer_addr));
+  }
+}
 void ReliableBroadcast::sendToAll(const Message& message) {
   std::string serialized_message = "MSG " + std::to_string(message.seq_num) +
                                    " " + std::to_string(message.sender_id) +
@@ -206,12 +227,19 @@ void ReliableBroadcast::sendMsgToPeer(const Message& message,
 
 void ReliableBroadcast::sendViewChangeToPeer(const ViewChangeMessage& message,
                                              const std::string& peer) {
-  std::string serialized_message =
-      "VIEW_CHANGE " + std::to_string(message.process_id);
+  std::string serialized_message;
   for (auto member : message.members) {
+    cout << "creating message for member: " << member.first << " "
+         << member.second << endl;
     serialized_message +=
         " " + member.first + " " + std::to_string(member.second);
+    cout << "serialized message: " << serialized_message << endl;
   }
+  serialized_message =
+      "VIEW_CHANGE " + std::to_string(message.process_id) + serialized_message;
+
+  // cout << "[DEBUG] Sending view change message: " << serialized_message <<
+  // endl;
   struct sockaddr_in peer_addr;
   peer_addr.sin_family = AF_INET;
   peer_addr.sin_port = htons(port);
@@ -233,6 +261,7 @@ void ReliableBroadcast::sendJoinMessage() {
              sizeof(broadcast_enable));
   sendto(sockfd, discovery_message.c_str(), discovery_message.size(), 0,
          (struct sockaddr*)&broadcast_addr, sizeof(broadcast_addr));
+  cout << "Sent join message: " << discovery_message << endl;
 }
 
 void ReliableBroadcast::HeartbeaThread() {
