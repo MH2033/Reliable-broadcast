@@ -11,6 +11,7 @@
 #include <iostream>
 #include <sstream>
 
+using namespace std;
 inline std::string curr_timestamp() {
   // Get current system offset from utc
   std::time_t now = std::time(nullptr);
@@ -94,6 +95,8 @@ void ReliableBroadcast::receiverThread() {
         int sender_id;
         std::string ip_address;
         iss >> sender_id >> ip_address;
+        cout << "Received join message from " << ip_address
+             << "id: " << sender_id << endl;
         view_change_in_progress = true;
         handleJoin(ip_address, sender_id);
       } else if (type == "ACK") {
@@ -120,6 +123,7 @@ void ReliableBroadcast::receiverThread() {
 void ReliableBroadcast::handleJoin(std::string ip_address, int id) {
   new_view = curr_view;
   new_view.push_back(std::make_pair(ip_address, process_id));
+
   ViewChangeMessage view_change(process_id, new_view);
   for (auto peer : curr_view) {
     sendViewChangeToPeer(view_change, peer.first);
