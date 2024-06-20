@@ -57,6 +57,7 @@ class ReliableBroadcast {
   void handleViewChange();
   void handleJoin(std::string ip_address, int process_id);
   void sendToAll(const Message& message);
+  void sendInstallView();
   void sendAckToAll(const AckMessage& message);
   void sendMsgToPeer(const Message& message, const std::string& peer);
   void sendViewChangeToPeer(const ViewChangeMessage& message,
@@ -69,6 +70,7 @@ class ReliableBroadcast {
   int process_id;
   std::vector<std::pair<std::string, int>> curr_view;
   std::vector<std::pair<std::string, int>> new_view;
+  std::map<int, int> ttl;
   std::set<int> flush_complete;
 
   int port;

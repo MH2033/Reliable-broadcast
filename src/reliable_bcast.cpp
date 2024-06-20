@@ -12,6 +12,7 @@
 #include <sstream>
 
 using namespace std;
+constexpr int TTL = 3;
 inline std::string curr_timestamp() {
   // Get current system offset from utc
   std::time_t now = std::time(nullptr);
@@ -106,7 +107,7 @@ void ReliableBroadcast::receiverThread() {
         int seq_num, sender_id;
         iss >> seq_num >> sender_id;
         handleAck(AckMessage(seq_num, sender_id));
-      } else if (type == "FLUSH") {
+      } else if (type == "FLUSH" && process_id == 0) {
         int sender_id;
         iss >> sender_id;
         flush_complete.insert(sender_id);
@@ -116,18 +117,41 @@ void ReliableBroadcast::receiverThread() {
           pending.clear();
           view_change_in_progress = false;
           curr_view = new_view;
-          cout << "View change complete" << endl;
+          cerr << "[DEBUG] " << curr_timestamp() << "View change: ";
+          for (auto peer : curr_view) {
+            cerr << peer.first << " " << peer.second << " ";
+          }
+          cerr << endl;
+          sendInstallView();
         }
+      } else if (type == "INSTALL_VIEW" && process_id != 0) {
+        int sender_id;
+        iss >> sender_id;
+        acked.clear();
+        pending.clear();
+        view_change_in_progress = false;
+        curr_view = new_view;
+        cerr << "[DEBUG] " << curr_timestamp() << "View change: ";
+        for (auto peer : curr_view) {
+          cerr << peer.first << " " << peer.second << " ";
+        }
+        cerr << endl;
+
+      } else if (type == "HEART_BEAT" && process_id == 0) {
+        int sender_id;
+        std::string ip_address;
+        iss >> sender_id >> ip_address;
+        ttl[sender_id] = TTL;
       }
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 }
 
 void ReliableBroadcast::handleJoin(std::string ip_address, int id) {
   new_view = curr_view;
   new_view.push_back(std::make_pair(ip_address, id));
-
+  ttl[id] = TTL;
   ViewChangeMessage view_change(process_id, new_view);
   for (auto peer : curr_view) {
     sendViewChangeToPeer(view_change, peer.first);
@@ -207,6 +231,19 @@ void ReliableBroadcast::sendToAll(const Message& message) {
   }
 }
 
+void ReliableBroadcast::sendInstallView() {
+  std::string serialized_message = "INSTALL_VIEW " + std::to_string(process_id);
+
+  for (const auto& peer : curr_view) {
+    struct sockaddr_in peer_addr;
+    peer_addr.sin_family = AF_INET;
+    peer_addr.sin_port = htons(port);
+    inet_pton(AF_INET, peer.first.c_str(), &peer_addr.sin_addr);
+    sendto(sockfd, serialized_message.c_str(), serialized_message.size(), 0,
+           (struct sockaddr*)&peer_addr, sizeof(peer_addr));
+  }
+}
+
 void ReliableBroadcast::sendMsgToPeer(const Message& message,
                                       const std::string& peer) {
   std::string serialized_message = "MSG " + std::to_string(message.seq_num) +
@@ -254,11 +291,54 @@ void ReliableBroadcast::sendJoinMessage() {
 }
 
 void ReliableBroadcast::HeartbeaThread() {
-  // while (running) {
-  //   sendJoinMessage();
-  //   std::this_thread::sleep_for(
-  //       std::chrono::seconds(2));  // Periodically send discovery messages
-  // }
+  while (running) {
+    {
+      std::lock_guard<std::mutex> lock(send_mtx);
+      if (process_id == 0) {
+        new_view = curr_view;
+        bool node_left = false;
+        for (auto peer : curr_view) {
+          if (peer.second != 0 && --ttl[peer.second] == 0) {
+            node_left = true;
+            cerr << "[DEBUG] " << curr_timestamp() << peer.first << " "
+                 << peer.second << " has left" << endl;
+            new_view.erase(
+                std::remove_if(new_view.begin(), new_view.end(),
+                               [peer](const std::pair<std::string, int>& p) {
+                                 return p.second == peer.second;
+                               }),
+                new_view.end());
+          }
+        }
+        if (node_left) {
+          curr_view = new_view;
+          ViewChangeMessage view_change(process_id, new_view);
+          for (auto peer : curr_view) {
+            sendViewChangeToPeer(view_change, peer.first);
+            for (auto msg : pending) {
+              sendMsgToPeer(msg, peer.first);
+            }
+            sendFlushToPeer(peer.first);
+          }
+        }
+      }
+
+      else {
+        std::string heart_beat_message =
+            "HEART_BEAT " + std::to_string(process_id) + " " + getLocalIP();
+        struct sockaddr_in broadcast_addr;
+        broadcast_addr.sin_family = AF_INET;
+        broadcast_addr.sin_port = htons(port);
+        broadcast_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+        int broadcast_enable = 1;
+        setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &broadcast_enable,
+                   sizeof(broadcast_enable));
+        sendto(sockfd, heart_beat_message.c_str(), heart_beat_message.size(), 0,
+               (struct sockaddr*)&broadcast_addr, sizeof(broadcast_addr));
+      }
+    }
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+  }
 }
 
 std::string ReliableBroadcast::getLocalIP() {
