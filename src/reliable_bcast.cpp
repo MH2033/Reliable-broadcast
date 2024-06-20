@@ -68,9 +68,8 @@ void ReliableBroadcast::receiverThread() {
     if (bytes_received > 0) {
       std::lock_guard<std::mutex> lock(send_mtx);
       std::string received_message(buffer, bytes_received);
-      std::cout << "[DEBUG] Received message: " << received_message
-                << std::endl;
-      std::cout << "curr_view size: " << curr_view.size() << endl;
+      std::cerr << "[DEBUG] " << curr_timestamp()
+                << "Received message : " << received_message << std::endl;
       std::istringstream iss(received_message);
       std::string type;
       iss >> type;
@@ -89,11 +88,9 @@ void ReliableBroadcast::receiverThread() {
           std::string ip_address;
           int process_id;
           iss >> ip_address >> process_id;
-          cout << "adding peer: " << ip_address << " " << process_id << endl;
           new_view.push_back(std::make_pair(ip_address, process_id));
         }
         if (curr_view.size() == 0) {
-          cout << "First view installed" << endl;
           curr_view = new_view;
           view_change_in_progress = false;
         } else {
@@ -132,7 +129,6 @@ void ReliableBroadcast::handleJoin(std::string ip_address, int id) {
   new_view.push_back(std::make_pair(ip_address, id));
 
   ViewChangeMessage view_change(process_id, new_view);
-  cout << "new view size: " << new_view.size() << endl;
   for (auto peer : curr_view) {
     sendViewChangeToPeer(view_change, peer.first);
     for (auto msg : pending) {
@@ -155,7 +151,6 @@ void ReliableBroadcast::sendFlushToPeer(const std::string& peer) {
 }
 void ReliableBroadcast::handleViewChange() {
   for (auto peer : curr_view) {
-    cout << "Peer: " << peer.first << " " << peer.second << endl;
     for (auto msg : pending) {
       sendMsgToPeer(msg, peer.first);
     }
@@ -229,17 +224,12 @@ void ReliableBroadcast::sendViewChangeToPeer(const ViewChangeMessage& message,
                                              const std::string& peer) {
   std::string serialized_message;
   for (auto member : message.members) {
-    cout << "creating message for member: " << member.first << " "
-         << member.second << endl;
     serialized_message +=
         " " + member.first + " " + std::to_string(member.second);
-    cout << "serialized message: " << serialized_message << endl;
   }
   serialized_message =
       "VIEW_CHANGE " + std::to_string(message.process_id) + serialized_message;
 
-  // cout << "[DEBUG] Sending view change message: " << serialized_message <<
-  // endl;
   struct sockaddr_in peer_addr;
   peer_addr.sin_family = AF_INET;
   peer_addr.sin_port = htons(port);
@@ -261,7 +251,6 @@ void ReliableBroadcast::sendJoinMessage() {
              sizeof(broadcast_enable));
   sendto(sockfd, discovery_message.c_str(), discovery_message.size(), 0,
          (struct sockaddr*)&broadcast_addr, sizeof(broadcast_addr));
-  cout << "Sent join message: " << discovery_message << endl;
 }
 
 void ReliableBroadcast::HeartbeaThread() {
