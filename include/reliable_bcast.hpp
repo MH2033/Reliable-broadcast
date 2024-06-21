@@ -11,6 +11,7 @@
 #include <thread>
 #include <vector>
 
+enum CommandType { NORMAL_SEND = 0, SEND_AND_CRASH, CRASH_ON_RECEIVE };
 struct Message {
   int seq_num;
   int sender_id;
@@ -44,7 +45,7 @@ struct JoinMessage {
 class ReliableBroadcast {
  public:
   ReliableBroadcast(int process_id, int port);
-  void broadcast(const std::string& message);
+  void broadcast(const CommandType command, const std::string& message);
   void start();
   void stop();
   void deliver(const Message& message);
@@ -80,6 +81,7 @@ class ReliableBroadcast {
   std::map<int, std::set<int>> acked;
   std::vector<Message> pending;
   bool running;
+  bool crash_on_receive{false};
   int sockfd;
   struct sockaddr_in addr;
 

@@ -35,11 +35,16 @@ ReliableBroadcast::ReliableBroadcast(int process_id, int port)
     sendJoinMessage();
 }
 
-void ReliableBroadcast::broadcast(const std::string& message) {
+void ReliableBroadcast::broadcast(const CommandType command,
+                                  const std::string& message) {
   std::lock_guard<std::mutex> lock(send_mtx);
   Message msg(seq_num++, process_id, message);
+  if (command == CommandType::CRASH_ON_RECEIVE) {
+    crash_on_receive = true;
+  }
   for (auto peer : curr_view) {
     sendMsgToPeer(msg, peer.first);
+    if (command == CommandType::SEND_AND_CRASH) exit(1);
   }
 }
 
@@ -78,6 +83,10 @@ void ReliableBroadcast::receiverThread() {
         int seq_num, sender_id;
         std::string content;
         iss >> seq_num >> sender_id;
+        if (sender_id != process_id && crash_on_receive) {
+          running = false;
+          break;
+        };
         std::getline(iss, content);
         handleMessage(Message(seq_num, sender_id, content));
       } else if (type == "VIEW_CHANGE" && process_id != 0) {

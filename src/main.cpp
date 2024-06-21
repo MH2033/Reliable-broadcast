@@ -13,12 +13,19 @@ int main(int argc, char* argv[]) {
   ReliableBroadcast rb(process_id, 49588);
   rb.start();
 
+  std::cout << "Enter command followed by message (Commands: 0 normal send, 1 "
+               "Send to one peer and crash, 2 Crash after the first receive)"
+            << std::endl;
   // Bulletin board simulation
   std::thread broadcaster([&rb]() {
+    CommandType command;
     std::string message;
     while (true) {
+      int mode;
+      std::cin >> mode;
       std::getline(std::cin, message);
-      rb.broadcast(message);
+      command = static_cast<CommandType>(mode);
+      rb.broadcast(command, message);
     }
   });
 
