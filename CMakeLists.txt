@@ -9,5 +9,5 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 file(GLOB SRC_FILES ${PROJECT_SOURCE_DIR}/src/*.cpp
                     ${PROJECT_SOURCE_DIR}/src/*.c
     )
-add_executable(bulletin_board ${SRC_FILES})
+add_executable(group_chat ${SRC_FILES})
 
